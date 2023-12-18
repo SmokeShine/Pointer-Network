@@ -102,7 +102,7 @@ class DecoderRNN(nn.Module):
         decoder_hidden = (encoder_hidden, encoder_cellstate)  # pass the hidden state
         decoder_outputs = []
 
-        for i in tqdm.tqdm(range(n_steps + 1)):
+        for i in tqdm.tqdm(range(n_steps)):
             # Decode next
             (decoder_output, decoder_hidden) = self.LSTMCell(
                 decoder_input, decoder_hidden
@@ -119,8 +119,6 @@ class DecoderRNN(nn.Module):
                 next_input[i, :] = input_coordinates[i][batch_pointers[i]]
             decoder_input = next_input
 
-            ## categorical cross entropy - how to use labels?
-            # Use pointer as input for next roll
             # https://stackoverflow.com/questions/61187520/should-decoder-prediction-be-detached-in-pytorch-training
             # decoder_input = topi.squeeze(
             #     -1
@@ -161,5 +159,5 @@ class PointerNetwork(nn.Module):
         encoder_outputs, encoder_hidden, encoder_cellstate = self.encoder(x)
         out = self.decoder(
             x, encoder_outputs, encoder_hidden, encoder_cellstate
-        )  # need to pass for getting the coordinates of next pointer
+        )  # need to pass x for getting the coordinates of next pointer
         return out

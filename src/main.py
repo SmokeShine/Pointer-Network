@@ -52,20 +52,6 @@ except:
     pass
 
 
-# def HeldKarpAlgorithm(distanceMatrix=None):
-#     distanceMatrix = pd.read_csv(
-#         "https://github.com/Valdecy/Datasets/raw/master/Combinatorial/TSP-01-Distance%20Matrix.txt",
-#         sep="\t",
-#     )
-#     distanceMatrix = distanceMatrix.values
-#     parameters = {"verbose": True}
-#     route, distance = bellman_held_karp_exact_algorithm(distance_matrix, **parameters)
-#     import pdb
-
-#     pdb.set_trace()
-#     return route, distance
-
-
 class SequenceWithLabelDataset(Dataset):
     def __init__(self, input_cities=[], ninstances=None):
         self.input_cities = input_cities
@@ -80,7 +66,9 @@ class SequenceWithLabelDataset(Dataset):
             for input_city in tqdm(self.input_cities):
                 locations = self.CreateInstance(city=input_city)
                 route, distance = self.HeldKarpHeuristics(locations)
-                route_.append([x - 1 for x in route])  # start index at 0
+                route_.append(
+                    [x - 1 for x in route[:-1]]
+                )  # start index at 0, remove last index for returning to start
                 distance_.append(distance)
                 locations_.append(locations)
         return (locations_, route_, distance_)
