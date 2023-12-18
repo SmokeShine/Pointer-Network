@@ -25,5 +25,6 @@ Bellman Held Karp Heuristic [2]
     1. L2 Gradient Clipping 2.0
     1. Batch Size 128
 
-1. Vinyals, O. et al.: Pointer Networks, <http://arxiv.org/abs/1506.03134>, (2017). <https://doi.org/10.48550/arXiv.1506.03134>.
-2. <https://github.com/Valdecy/pyCombinatorial>
+[1] Vinyals, O. et al.: Pointer Networks, <http://arxiv.org/abs/1506.03134>, (2017). <https://doi.org/10.48550/arXiv.1506.03134>.
+
+[2] <https://github.com/Valdecy/pyCombinatorial>
