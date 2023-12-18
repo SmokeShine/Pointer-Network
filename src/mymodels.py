@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import tqdm
 
-START_TOKEN = 0
-END_TOKEN = 999
+START_TOKEN = 0  # Used for starting the decoding process
 
 
 # https://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html
@@ -19,6 +18,10 @@ class EncoderRNN(nn.Module):
             dropout=dropout,
             bidirectional=False,
         )
+        # random uniform weight initialization from -0.08 to 0.08
+        for name, param in self.LSTMCell.named_parameters():
+            if "weight" in name:
+                nn.init.uniform_(param, a=-0.08, b=0.08)
 
     def forward(self, input):
         # https://i.stack.imgur.com/SjnTl.png
@@ -26,9 +29,6 @@ class EncoderRNN(nn.Module):
         # (hidden,cellstate) - hidden,cellstate by rolling over all timesteps (final)
 
         output, (hidden, cellstate) = self.LSTMCell(input)
-        ## concatenate 0 to output for end token -> this is required for convex example in figure 1 as there is possibility of skipping a point.
-        # end_token_pad = torch.zeros_like(hidden.permute(1, 0, 2))
-        # padded_output = torch.cat((end_token_pad, output), dim=1)
         return output, hidden, cellstate
 
 
@@ -41,10 +41,10 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.tanh = torch.tanh
         self.softmax = torch.softmax
-        # 5 is dimensionality reduction. Paper does not talk apart from V being learnable and becomes a vector
-        self.W1_encoder = nn.Linear(encoder_hidden_size, 5).to("mps")
-        self.W2_decoder = nn.Linear(decoder_hidden_size, 5).to("mps")
-        self.V = nn.Linear(5, 1).to(
+        # 32 is dimensionality reduction. Paper does not talk apart from V being learnable and becomes a vector
+        self.W1_encoder = nn.Linear(encoder_hidden_size, 32).to("mps")
+        self.W2_decoder = nn.Linear(decoder_hidden_size, 32).to("mps")
+        self.V = nn.Linear(32, 1).to(
             "mps"
         )  # V is a vector as encoder and decoder hidden state have same dimensions
 
@@ -61,8 +61,7 @@ class Attention(nn.Module):
             decoder_output
         )  # j belongs 1...n for encoder hidden states
         tanh_ = self.tanh(sum_)
-        # torch.nn.Linear(in_features, out_features)
-        logits = self.V(tanh_).squeeze(-1)
+        logits = self.V(tanh_).squeeze(-1)  # torch.nn.Linear(in_features, out_features)
         softmax_ = self.softmax(logits, axis=1)  # CCE requires unnormalized logits
         maxvalue, pointer = softmax_.max(
             axis=1
@@ -84,6 +83,10 @@ class DecoderRNN(nn.Module):
             dropout=dropout,
             bidirectional=False,
         )
+        # random uniform weight initialization from -0.08 to 0.08
+        for name, param in self.LSTMCell.named_parameters():
+            if "weight" in name:
+                nn.init.uniform_(param, a=-0.08, b=0.08)
 
     def forward(
         self, input_coordinates, encoder_outputs, encoder_hidden, encoder_cellstate
@@ -104,7 +107,7 @@ class DecoderRNN(nn.Module):
             (decoder_output, decoder_hidden) = self.LSTMCell(
                 decoder_input, decoder_hidden
             )
-            attention = Attention()  # length will come from broadcasting of 1..n for j
+            attention = Attention()
             logits, batch_pointers = attention(decoder_output, encoder_outputs)
             decoder_outputs.append(logits)
 
@@ -118,7 +121,6 @@ class DecoderRNN(nn.Module):
 
             ## categorical cross entropy - how to use labels?
             # Use pointer as input for next roll
-
             # https://stackoverflow.com/questions/61187520/should-decoder-prediction-be-detached-in-pytorch-training
             # decoder_input = topi.squeeze(
             #     -1
@@ -136,12 +138,9 @@ class PointerNetwork(nn.Module):
     # - 256/512 hidden units
     # - SGD
     #     - learning rate 1.0
-    # - Gradient Clipping 2.0
+    # - L2 Gradient Clipping 2.0
     # - Batch Size 128
     # - Random Uniform weight initialization (-0.08 to 0.08)
-    # Question - how to create batch with variable length that includes start and end token
-    # Question - how to calculate loss function?
-    # if tokens are appended, how will this work in batch? because batch is created based on max length which is a function of input length
 
     def __init__(self):
         super(PointerNetwork, self).__init__()

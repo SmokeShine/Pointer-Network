@@ -3,9 +3,9 @@ import time
 import logging
 import logging.config
 import numpy as np
-
-# from sklearn.metrics import f1_score,roc_auc_score,accuracy_score
 import torch
+import torch.nn as nn
+
 import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,7 @@ def train(model, device, data_loader, criterion, optimizer, epoch, print_freq=50
 
         assert not np.isnan(loss.item()), "Model diverged with loss = NaN"
         loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0, norm_type=2)
         optimizer.step()
         losses.update(loss.item(), target.size(0))
         if i % print_freq == 0:
@@ -62,9 +63,6 @@ def evaluate(model, device, data_loader, criterion, optimizer, print_freq=10):
             target = target.to(device)
             optimizer.zero_grad()
             output = model(data)
-            import pdb
-
-            pdb.set_trace()
             loss = criterion(output, target)
             losses.update(loss.item(), target.size(0))
             if i % print_freq == 0:
@@ -76,6 +74,6 @@ def evaluate(model, device, data_loader, criterion, optimizer, print_freq=10):
 
 def save_checkpoint(model, optimizer, path):
     state = {"model": model.state_dict(), "optimizer": optimizer.state_dict()}
-    # torch.save(state, path)
+    torch.save(state, path)
     torch.save(model, "./checkpoint_model.pth", _use_new_zipfile_serialization=False)
-    logger.info(f"checkpoint saved at ./checkpoint_model.pth")
+    logger.info(f"checkpoint saved at {path}")

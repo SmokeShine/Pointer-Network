@@ -6,6 +6,7 @@ import logging
 import logging.config
 import numpy as np
 import pandas as pd
+from plots import plot_loss_curve
 from scipy.spatial.distance import pdist, squareform
 from math import sin, cos, sqrt, atan2, radians
 import warnings
@@ -34,6 +35,9 @@ import math
 warnings.filterwarnings("ignore")
 
 logger = logging.getLogger(__name__)
+
+torch.manual_seed(42)
+
 try:
     logging.config.fileConfig(
         "logging.ini",
@@ -48,25 +52,18 @@ except:
     pass
 
 
-def HeldKarpAlgorithm(distanceMatrix=None):
-    distanceMatrix = pd.read_csv(
-        "https://github.com/Valdecy/Datasets/raw/master/Combinatorial/TSP-01-Distance%20Matrix.txt",
-        sep="\t",
-    )
-    distanceMatrix = distanceMatrix.values
-    parameters = {"verbose": True}
-    route, distance = bellman_held_karp_exact_algorithm(distance_matrix, **parameters)
-    import pdb
-
-    pdb.set_trace()
-    return route, distance
-
-
-# def collate_fn(batch):
-#     location, sequence = zip(*batch)
+# def HeldKarpAlgorithm(distanceMatrix=None):
+#     distanceMatrix = pd.read_csv(
+#         "https://github.com/Valdecy/Datasets/raw/master/Combinatorial/TSP-01-Distance%20Matrix.txt",
+#         sep="\t",
+#     )
+#     distanceMatrix = distanceMatrix.values
+#     parameters = {"verbose": True}
+#     route, distance = bellman_held_karp_exact_algorithm(distance_matrix, **parameters)
 #     import pdb
 
 #     pdb.set_trace()
+#     return route, distance
 
 
 class SequenceWithLabelDataset(Dataset):
@@ -139,77 +136,96 @@ def train_model(model_name="PointerNetwork"):
     train_dataset = SequenceWithLabelDataset(
         # input_cities=[CUSTOMERCOUNT, CUSTOMERCOUNT + 1, CUSTOMERCOUNT + 2],
         input_cities=[CUSTOMERCOUNT],
-        ninstances=BATCH_SIZE,  # variable length batches
+        ninstances=100000,  # 1 million instances
     )
     train_loader = DataLoader(
         dataset=train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        # collate_fn=collate_fn,
+    )
+    valid_dataset = SequenceWithLabelDataset(
+        # input_cities=[CUSTOMERCOUNT, CUSTOMERCOUNT + 1, CUSTOMERCOUNT + 2],
+        input_cities=[CUSTOMERCOUNT],
+        ninstances=5,  # variable length batches
+    )
+    valid_loader = DataLoader(
+        dataset=valid_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
         # collate_fn=collate_fn,
     )
-
     criterion = nn.CrossEntropyLoss()
     criterion.to(DEVICE)
     train_loss_history = []
-
+    valid_loss_history = []
+    best_validation_loss = float("inf")
+    early_stopping_counter = 0
     for epoch in range(1, NUM_EPOCHS + 1):
         logger.info(f"Epoch {epoch}")
         train_loss = train(model, DEVICE, train_loader, criterion, optimizer, epoch)
         logger.info(f"Average Loss for epoch {epoch} is {train_loss}")
         train_loss_history.append(train_loss)
+
+        valid_loss = evaluate(model, DEVICE, valid_loader, criterion, optimizer)
+        valid_loss_history.append(valid_loss)
+        is_best = best_validation_loss > valid_loss
         if epoch % EPOCH_SAVE_CHECKPOINT == 0:
             logger.info(f"Saving Checkpoint for {model_name} at epoch {epoch}")
             save_checkpoint(model, optimizer, save_file + "_" + str(epoch) + ".tar")
+        if is_best:
+            early_stopping_counter = 0
+            logger.info(
+                f"New Best Identified: \t Old Loss: {best_validation_loss}  vs New loss:\t{valid_loss} "
+            )
+            best_validation_loss = valid_loss
+            torch.save(model, "./best_model.pth", _use_new_zipfile_serialization=False)
+        else:
+            logger.info("Loss didnot improve")
+            early_stopping_counter += 1
+        if early_stopping_counter >= PATIENCE:
+            break
     # final checkpoint saved
     save_checkpoint(model, optimizer, save_file + ".tar")
     # Loading Best Model
     best_model = torch.load("./checkpoint_model.pth")
-
+    logger.info(f"Train Losses:{train_loss_history}")
+    logger.info(f"Validation Losses:{valid_loss_history}")
     logger.info(f"Plotting Charts")
+
+    plot_loss_curve(
+        model_name,
+        train_loss_history,
+        valid_loss_history,
+        "Loss Curve",
+        f"{PLOT_OUTPUT_PATH}loss_curves.jpg",
+    )
     logger.info(f"Train Losses:{train_loss_history}")
     logger.info(f"Training Finished for {model_name}")
 
 
-def predict_model(best_model, images_file, labels_file, pixel_classes):
-    images_dataset = SequenceWithLabelDataset(
-        images_file,
-        labels_file,
-        num_categories=len(pixel_classes),
-        pixel_classes=pixel_classes,
-    )
+def predict_model(best_model):
+    pred_dataset = SequenceWithLabelDataset(input_cities=[CUSTOMERCOUNT], ninstances=1)
     pred_loader = DataLoader(
-        dataset=images_dataset, batch_size=1, shuffle=False, num_workers=0
+        dataset=pred_dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=0,
     )
     # No need to calculate grad as it is forward pass only
     best_model.eval()
     with torch.no_grad():
-        for counter, (input, target, img_name) in tqdm(enumerate(pred_loader)):
+        for counter, (input, target) in tqdm(enumerate(pred_loader)):
             # Model is in GPU
             input = input.to(DEVICE)
             target = target.to(DEVICE)
-            # which pixel belongs to which object, etc.
-            # assign a class to each pixel of the image.
             output = best_model(input)
-            # Output is 32 classes and we need to collapse back to 1
-            # import pdb;pdb.set_trace()
-            expected_width = output.shape[2]
-            expected_height = output.shape[3]
-            temp_image = torch.zeros((3, expected_width, expected_height))
-            logging.info(f"Image is {img_name}")
-            torch_pixel_classes = torch.from_numpy(pixel_classes)
-            for i in range(expected_width):
-                for j in range(expected_height):
-                    temp_image[:, i, j] = torch_pixel_classes[
-                        torch.argmax(output[0, :, i, j])
-                    ]
-            # import pdb;pdb.set_trace()
-            # https://discuss.pytorch.org/t/convert-float-image-array-to-int-in-pil-via-image-fromarray/82167/4
-            temp_image = temp_image.permute(1, 2, 0).numpy().astype(np.uint8)
-            save_image(input, f"./predictions/actual_{counter}.png")
-            transforms.ToPILImage()(temp_image).save(
-                f"./predictions/pred_{counter}_{img_name}.png"
-            )
+            logger.info(f"Input:{input}")
+            _, pointer = torch.max(output, axis=1)
+            logger.info(f"Prediction:{pointer}")
+            logger.info(f"Target:{target}")
             break
 
 
@@ -226,7 +242,7 @@ def parse_args():
         help="Number of customers",
     )
     parser.add_argument(
-        "--train", action="store_true", default=True, help="Train Model"
+        "--train", action="store_true", default=False, help="Train Model"
     )
     parser.add_argument(
         "--batch_size",
@@ -249,7 +265,7 @@ def parse_args():
         "--learning_rate",
         nargs="?",
         type=float,
-        default=0.01,
+        default=1.0,
         help="Learning Rate for the optimizer",
     )
     parser.add_argument(
@@ -276,6 +292,9 @@ def parse_args():
         help="Model for prediction; Default is checkpoint_model.pth; \
                             change to ./best_model.pth for 1 sample best model",
     )
+    parser.add_argument(
+        "--patience", nargs="?", type=int, default=5, help="Early stopping epoch count"
+    )
     return parser.parse_args()
 
 
@@ -285,7 +304,7 @@ if __name__ == "__main__":
 
     CUSTOMERCOUNT = args.customers
 
-    global BATCH_SIZE, NUM_EPOCHS, NUM_WORKERS, LEARNING_RATE, SGD_MOMENTUM, PRED_MODEL
+    global BATCH_SIZE, NUM_EPOCHS, NUM_WORKERS, LEARNING_RATE, SGD_MOMENTUM, PRED_MODEL, PATIENCE
     __train__ = args.train
     BATCH_SIZE = args.batch_size
     NUM_WORKERS = args.num_workers
@@ -295,7 +314,7 @@ if __name__ == "__main__":
     PLOT_OUTPUT_PATH = args.plot_output_path
     EPOCH_SAVE_CHECKPOINT = args.epoch_save_checkpoint
     MODEL_PATH = args.model_path
-
+    PATIENCE = args.patience
     PRED_MODEL = args.pred_model
     DEVICE = torch.device("mps")
 
@@ -305,6 +324,8 @@ if __name__ == "__main__":
         logger.info("Training")
         train_model()
     else:
-        logger.info("Training")
+        logger.info("Prediction")
+        best_model = torch.load(PRED_MODEL)
+        logger.info(f"Using {PRED_MODEL} for prediction")
         predict_model(best_model)
         logger.info("Prediction Step Complete")
