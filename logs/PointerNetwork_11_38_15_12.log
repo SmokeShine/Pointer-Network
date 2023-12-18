@@ -1,0 +1,24 @@
+2023-12-15 11:38:04,878 __main__     INFO     Namespace(customers=3, train=True, batch_size=4, num_workers=0, num_epochs=10, learning_rate=0.01, sgd_momentum=0.0, plot_output_path='./Plots_', model_path=None, epoch_save_checkpoint=5, pred_model='./checkpoint_model.pth')
+2023-12-15 11:38:04,878 __main__     INFO     Problem Size:3
+2023-12-15 11:38:04,878 __main__     INFO     Training
+2023-12-15 11:38:04,878 __main__     INFO     Generating DataLoader
+2023-12-15 11:38:04,878 __main__     INFO     Training Model
+2023-12-15 11:38:04,898 __main__     INFO     PointerNetwork(
+  (encoder): EncoderRNN(
+    (LSTMCell): LSTM(2, 512, batch_first=True)
+  )
+  (decoder): DecoderRNN(
+    (LSTMCell): LSTM(2, 512, batch_first=True)
+  )
+)
+2023-12-15 11:38:04,936 __main__     INFO     PointerNetwork(
+  (encoder): EncoderRNN(
+    (LSTMCell): LSTM(2, 512, batch_first=True)
+  )
+  (decoder): DecoderRNN(
+    (LSTMCell): LSTM(2, 512, batch_first=True)
+  )
+)
+2023-12-15 11:38:04,975 __main__     INFO     Epoch 1
+2023-12-15 11:38:07,557 utils        INFO     Epoch: 1 	 iteration: 0 	 Training Loss Current:1.0999 Average:(1.0999)
+2023-12-15 11:38:07,642 __main__     INFO     Average Loss for epoch 1 is 1.0994703372319539
